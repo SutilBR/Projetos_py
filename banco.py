@@ -2,81 +2,124 @@ import datetime
 
 class Banco:
     def __init__(self):
-        self.contas={}
-        
+        self.contas={} 
 
-    def adicionar_contas(self, numero_conta, detalhe_conta, data):
-        if numero_conta in self.contas:
+    def adicionar_conta(self, numero_conta, detalhe_conta, data):
+        """
+        Adicionar contas, fazendo a verificação se essa conta já existe
+        
+        Args:
+            numero_conta: numero da conta
+            detalhe_conta: detalhe da conta, nome, e saldo
+            data: Data e hora, usado para sabermos no historico a data de movimentação
+        """
+        if numero_conta in self.contas: # verifica se a conta já existe
             print(f"A conta {numero_conta} já existe")
-        else:
+        else: # Cria a conta e adiciona o histórico dela
             self.contas[numero_conta] = {"detalhe_conta": detalhe_conta, "historico":[]}
             self.historico(numero_conta, "Conta criada", 0, True, data)
             print(f"A conta {numero_conta} foi adicionada com sucesso. {detalhe_conta}")
         
-    def verificar_contas(self, numero_conta, data):
-        if numero_conta in self.contas:
+    def verificar_conta(self, numero_conta, data):
+        """
+        Verificar a conta, se a conta não existe, iremos verificar se a pessoa quer fazer uma conta
+
+        Args:
+            numero_conta: numero da conta
+            data: data
+        """
+        if numero_conta in self.contas: # verifica se a conta existe, e informa os detalhes da conta e alimenta o historico.
             detalhes_conta = self.contas[numero_conta]["detalhe_conta"]
             saldo = detalhes_conta["saldo"]
             print(f"Detalhes da conta: {detalhes_conta}")
             self.historico(numero_conta, "Conta verificada", saldo, True, data)
-        else:
+            conta_historico = self.contas[numero_conta]["historico"]
+            print(f"Histórico da conta: \n {conta_historico}")
+        else: # a conta não existe, e dá a opção de criar uma nova conta
             print(f"A conta {numero_conta} não foi encontrada.")
-            bool_conta = input("Você deseja criar uma nova conta? ") 
+            bool_conta = input("Você deseja criar uma nova conta? (Sim/Não)") 
             if bool_conta.lower() == "sim":
                 nova_conta = input("Informe o Nº da conta que deseja: ")
                 nova_detalhes_nome = input("Digite o nome do titular: ")
-                self.adicionar_contas(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data)
+                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data)
             else:
                 print("Não entendi a sua resposta. Voltando para o Menu...")
 
-
     def depositar(self, numero_conta, valor, data):
-        if numero_conta in self.contas:
+        """
+        Função para realizar o depósito, é verificado se a conta existe
+
+        Args:
+            numero_conta: numero da conta
+            valor: valor do depósito
+            data: data
+        """
+        if numero_conta in self.contas: # verifica se a conta existe, e faz o saldo, mostra o novo saldo
             self.contas[numero_conta]["detalhe_conta"]["saldo"] += valor
             novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
             print(f"Seu novo saldo é de R$ {novo_saldo}")
             self.historico(numero_conta, "Depósito", novo_saldo, True, data)
-        else:
+        else: # a conta não foi encontrada
             print(f"Conta {numero_conta} não encontrada, por favor, tente novamente.")
 
     def transferencia(self, numero_conta_recebedora, numero_conta_pagadora, valor, data):
         pass
     
     def saque(self, numero_conta, valor, data):
-        try: 
+        """
+        Realiza o saque, verifica se na conta existe saldo e faz o saque. mostra o novo valor do saldo após o saque
+
+        Args:
+            numero_conta: numero da conta
+            valor: valor do saque
+            data: data
+        """
+        try:  
             valor = float(valor) # Verificar se o valor é numérico
-        except ValueError:
+        except ValueError: # tratamento de erro para se o valor não for numérico
             print("Valor invalido. Por favor, insira um valor numérico.")
             return
-        if valor <=0:
+        if valor <=0: # verifica se o saque é maior que zero
             print("O valor do saque deve ser maior que zero.")
             return
 
-        if numero_conta in self.contas:
+        if numero_conta in self.contas: # verifica se a conta existe e faz o saque
             if self.contas[numero_conta]["detalhe_conta"]["saldo"] > valor:
                 self.contas[numero_conta]["detalhe_conta"]["saldo"] -= valor
                 novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
                 print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {novo_saldo:.2f}")
                 self.historico(numero_conta, "Saque", novo_saldo, True, data)
-            else:
+            else: # se a conta não possuir o saldo necessário para o saque, irá aparecer mensagem de saldo insuficiente
                 print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {self.contas[numero_conta]['detalhe_conta']['saldo']:.2f}.")
                 self.historico(numero_conta, "Saque", self.contas[numero_conta]['detalhe_conta']['saldo'], False, data)
-        else:
+        else: # a conta não foi encontrada
             print("Conta não encontrada, por favor, tente novamente.")
 
     def historico(self, numero_conta, tipo, valor, bool_teste, data): # tipo(saque, deposito, criação), valor, status, data e hora
-        if numero_conta in self.contas:
+        """
+        historico de movimentação na conta, tentativas de saques, depositos, e a criação da conta
+
+        Args:
+            numero_conta: numero da conta
+            tipo: tipo de movimentação (deposito, saque, criação, verificação)
+            valor: valor da conta
+            bool_teste: se a movimentação foi realizada (true) ou foi recusada (false)
+            data: data
+        """
+        if numero_conta in self.contas: # verifica se a conta existe e adiciona o historico da conta
             historico = {
                 "Numero conta: ": numero_conta,
                 "Tipo de transação: ": tipo,
-                "Valor de transação: ": valor,
-                "Status da transação: ": bool_teste,
+                "Valor de transação: ": valor.float(),
+                "Status da transação: ": "Sucesso" if bool_teste == True else "Falha",
                 "Data da transação: ": data.strftime("%D-%m-%Y %H:%M:%S")
+
             }
             self.contas[numero_conta]["historico"].append(historico)
-            print(historico)
 
     def menu_principal(self):
+        """Menu interativo para os usuarios com as opções para o sistema"""
+        
         while True:
             menu = ("""
 Escolha uma opção abaixo:
@@ -91,11 +134,11 @@ Escolha uma opção abaixo:
             if opção == "1": # Adicionar conta
                 nova_conta = input("Informe o Nº da conta que deseja: ")
                 nova_detalhes_nome = input("Digite o nome do titular: ")
-                self.adicionar_contas(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data_transação)
+                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data_transação)
                 
             elif opção == "2": # Verificar conta
                 verificar_conta = input("Digite o número da conta que deseja verificar: ")
-                self.verificar_contas(verificar_conta, data_transação)
+                self.verificar_conta(verificar_conta, data_transação)
 
             elif opção == "3": # Realiza deposito
                 deposito_conta = input("Digite o número da conta para o depósito: ")
