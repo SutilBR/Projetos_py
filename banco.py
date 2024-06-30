@@ -5,12 +5,16 @@ class Banco:
     def __init__(self, conexao):
         self.contas={} 
         self.conexao = conexao
+        self.cursor = conexao.cursor()
         cursor = conexao.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS banco
+        cursor.execute("""CREATE TABLE IF NOT EXISTS historico
                        (id INTEGER PRIMARY KEY, Numero_conta TEXT, Descricao TEXT, Saldo REAL, Status TEXT, Data TEXT)""")
         conexao.commit()
+        cursor.execute("""CREATE TABLE IF NOT EXISTS user
+                       (id INTEGER PRIMARY KEY, Numero_conta TEXT, nome TEXT, senha text, Data TEXT)""")
+        conexao.commit()
 
-    def adicionar_conta(self, numero_conta, detalhe_conta, data):
+    def adicionar_conta(self, numero_conta, detalhe_conta, senha, data):
         """
         Adicionar contas, fazendo a verificação se essa conta já existe
         
@@ -19,11 +23,15 @@ class Banco:
             detalhe_conta: detalhe da conta, nome, e saldo
             data: Data e hora, usado para sabermos no historico a data de movimentação
         """
-        if numero_conta in self.contas: # verifica se a conta já existe
-            print(f"A conta {numero_conta} já existe")
+        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
+        resultado = self.cursor.fetchone()
+        if resultado: # se a conta já existir irá aparecer essa mensagem
+            print(f"A conta {numero_conta} Já existe")
+            return False
         else: # Cria a conta e adiciona o histórico dela
             self.contas[numero_conta] = {"detalhe_conta": detalhe_conta, "historico":[]}
             self.historico(numero_conta, "Conta criada", 0, True, data)
+            self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], senha, data)
             print(f"A conta {numero_conta} foi adicionada com sucesso. {detalhe_conta}")
         
     def verificar_conta(self, numero_conta, data):
@@ -34,7 +42,10 @@ class Banco:
             numero_conta: numero da conta
             data: data
         """
-        if numero_conta in self.contas: # verifica se a conta existe, e informa os detalhes da conta e alimenta o historico.
+
+        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
+        resultado = self.cursor.fetchone()
+        if resultado:
             detalhes_conta = self.contas[numero_conta]["detalhe_conta"]
             saldo = detalhes_conta["saldo"]
             print(f"Detalhes da conta: {detalhes_conta}")
@@ -60,7 +71,9 @@ class Banco:
             valor: valor do depósito
             data: data
         """
-        if numero_conta in self.contas: # verifica se a conta existe, e faz o saldo, mostra o novo saldo
+        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
+        resultado = self.cursor.fetchone()
+        if resultado:
             self.contas[numero_conta]["detalhe_conta"]["saldo"] += valor
             novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
             print(f"Seu novo saldo é de R$ {novo_saldo}")
@@ -78,8 +91,12 @@ class Banco:
             valor: valor da transferencia
             data: data da transação
         """
-        if numero_conta_pagadora in self.contas:
-            if numero_conta_recebedora in self.contas:
+        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta_pagadora,))
+        resultado = self.cursor.fetchone()
+        if resultado:
+            self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta_recebedora,))
+            resultado = self.cursor.fetchone()
+            if resultado:
                 if self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] >= valor:
                     self.contas[numero_conta_recebedora]["detalhe_conta"]["saldo"] += valor
                     self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] -= valor
@@ -112,7 +129,9 @@ class Banco:
             print("O valor do saque deve ser maior que zero.")
             return
 
-        if numero_conta in self.contas: # verifica se a conta existe e faz o saque
+        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
+        resultado = self.cursor.fetchone()
+        if resultado:
             if self.contas[numero_conta]["detalhe_conta"]["saldo"] > valor:
                 self.contas[numero_conta]["detalhe_conta"]["saldo"] -= valor
                 novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
@@ -144,8 +163,20 @@ class Banco:
         }
         self.contas[numero_conta]["historico"].append(historico)
         cursor = conexao.cursor()
-        cursor.execute("INSERT INTO banco (Numero_conta, Descricao, Saldo, Status, Data) VALUES (?, ?, ?, ?, ?)",
+        cursor.execute("INSERT INTO historico (Numero_conta, Descricao, Saldo, Status, Data) VALUES (?, ?, ?, ?, ?)",
                         (historico["Numero_conta"], historico["Descricao"], historico["Saldo"], historico["Status"], historico["Data"]))
+        conexao.commit()
+
+    def historico_cadastro(self, numero_conta, nome, senha, data):
+        historico_cadastro = {
+            "Numero_conta": numero_conta,
+            "Nome": nome,
+            "Password": senha,
+            "Data": data.strftime("%d-%m-%Y %H:%M:%S")
+            }
+        cursor = conexao.cursor()
+        cursor.execute("INSERT INTO user (Numero_conta, Nome, senha, Data) VALUES (?, ?, ?, ?)",
+                    (historico_cadastro["Numero_conta"], historico_cadastro["Nome"], historico_cadastro["Password"], historico_cadastro["Data"]))
         conexao.commit()
 
     def menu_principal(self):
@@ -167,7 +198,8 @@ Escolha uma opção abaixo:
             if opção == "1": # Adicionar conta
                 nova_conta = input("Informe o Nº da conta que deseja: ")
                 nova_detalhes_nome = input("Digite o nome do titular: ")
-                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data_transação)
+                nova_senha = input("Informe a senha da conta: ")
+                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, nova_senha, data_transação)
                 
             elif opção == "2": # Verificar conta
                 verificar_conta = input("Digite o número da conta que deseja verificar: ")
