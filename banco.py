@@ -1,8 +1,14 @@
 import datetime
+import sqlite3
 
 class Banco:
-    def __init__(self):
+    def __init__(self, conexao):
         self.contas={} 
+        self.conexao = conexao
+        cursor = conexao.cursor()
+        cursor.execute("""CREATE TABLE IF NOT EXISTS banco
+                       (id INTEGER PRIMARY KEY, Numero_conta TEXT, Descricao TEXT, Saldo REAL, Status TEXT, Data TEXT)""")
+        conexao.commit()
 
     def adicionar_conta(self, numero_conta, detalhe_conta, data):
         """
@@ -129,16 +135,18 @@ class Banco:
             bool_teste: se a movimentação foi realizada (true) ou foi recusada (false)
             data: data
         """
-        if numero_conta in self.contas: # verifica se a conta existe e adiciona o historico da conta
-            historico = {
-                "Numero conta: ": numero_conta,
-                "Tipo de transação: ": tipo,
-                "Valor de transação: ": float(valor),
-                "Status da transação: ": "Sucesso" if bool_teste == True else "Falha",
-                "Data da transação: ": data.strftime("%D-%m-%Y %H:%M:%S")
-
-            }
-            self.contas[numero_conta]["historico"].append(historico)
+        historico = {
+            "Numero_conta": numero_conta,
+            "Descricao": tipo,
+            "Saldo": float(valor),
+            "Status": "Sucesso" if bool_teste else "Falha",
+            "Data": data.strftime("%d-%m-%Y %H:%M:%S")
+        }
+        self.contas[numero_conta]["historico"].append(historico)
+        cursor = conexao.cursor()
+        cursor.execute("INSERT INTO banco (Numero_conta, Descricao, Saldo, Status, Data) VALUES (?, ?, ?, ?, ?)",
+                        (historico["Numero_conta"], historico["Descricao"], historico["Saldo"], historico["Status"], historico["Data"]))
+        conexao.commit()
 
     def menu_principal(self):
         """Menu interativo para os usuarios com as opções para o sistema"""
@@ -168,7 +176,7 @@ Escolha uma opção abaixo:
             elif opção == "3": # Realiza deposito
                 deposito_conta = input("Digite o número da conta para o depósito: ")
                 try: 
-                    deposito_valor = int(input("Digite o valor do depósito: "))
+                    deposito_valor = float(input("Digite o valor do depósito: "))
                 except ValueError:
                     print("Valor inválido. Por favor, insira um valor númerico")
                     continue # volta ao inicio do loop
@@ -179,7 +187,7 @@ Escolha uma opção abaixo:
 
             elif opção == "4": # Realizar saque
                 numero_conta_saque = input("Digite o número da conta para o saque: ")
-                try: valor_saque = int(input("Digite o valor do saque: "))
+                try: valor_saque = float(input("Digite o valor do saque: "))
                 except ValueError: 
                     print("Valor inválido. Por favor, insira um valor númerico")
                     continue # volta ao inicio do loop
@@ -205,11 +213,13 @@ Escolha uma opção abaixo:
 
             elif opção == "0":
                 print("Encerrando o programa...")
+                self.conexao.close()
                 break
                 
             else:
                 print("Opção inválida. Por favor, escolha uma as opções existentes no MENU")
 
 if __name__ == "__main__":
-    Banco = Banco()
+    conexao = sqlite3.connect("Banco.db")
+    Banco = Banco(conexao)
     Banco.menu_principal()
