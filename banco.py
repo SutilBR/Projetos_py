@@ -62,9 +62,32 @@ class Banco:
         else: # a conta não foi encontrada
             print(f"Conta {numero_conta} não encontrada, por favor, tente novamente.")
 
-    def transferencia(self, numero_conta_recebedora, numero_conta_pagadora, valor, data):
-        pass
-    
+    def transferencia(self, numero_conta_pagadora, numero_conta_recebedora, valor, data):
+        """
+        Função para realizar transferencia entre contas existentes
+
+        Args:
+            numero_conta_recebedora: numero da conta que irá receber o dinheiro
+            numero_conta_pagadora: numero da conta que irá pagar
+            valor: valor da transferencia
+            data: data da transação
+        """
+        if numero_conta_pagadora in self.contas:
+            if numero_conta_recebedora in self.contas:
+                if self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] >= valor:
+                    self.contas[numero_conta_recebedora]["detalhe_conta"]["saldo"] += valor
+                    self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] -= valor
+                    print(f"Transferência realizada com sucesso. Seu novo saldo é {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
+                    self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], True, data)
+                    self.historico(numero_conta_recebedora, "Transferencia Crédito", self.contas[numero_conta_recebedora]['detalhe_conta']['saldo'], True, data)
+                else:
+                    print(f"Saldo insuficiente. Seu saldo é de R$ {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
+                    self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], False, data)
+            else:
+                print(f"A conta {numero_conta_recebedora}, não existe.")
+        else:
+            print(f"A conta {numero_conta_pagadora}, não existe.")
+
     def saque(self, numero_conta, valor, data):
         """
         Realiza o saque, verifica se na conta existe saldo e faz o saque. mostra o novo valor do saldo após o saque
@@ -110,7 +133,7 @@ class Banco:
             historico = {
                 "Numero conta: ": numero_conta,
                 "Tipo de transação: ": tipo,
-                "Valor de transação: ": valor.float(),
+                "Valor de transação: ": float(valor),
                 "Status da transação: ": "Sucesso" if bool_teste == True else "Falha",
                 "Data da transação: ": data.strftime("%D-%m-%Y %H:%M:%S")
 
@@ -127,10 +150,12 @@ Escolha uma opção abaixo:
 [2] Verificar Conta
 [3] Realizar Depósito
 [4] Realizar Saque
+[5] Realizar transferência
 [0] Sair
 """)
             opção = input(menu)
             data_transação = datetime.datetime.now()
+
             if opção == "1": # Adicionar conta
                 nova_conta = input("Informe o Nº da conta que deseja: ")
                 nova_detalhes_nome = input("Digite o nome do titular: ")
@@ -162,6 +187,21 @@ Escolha uma opção abaixo:
                     print("O valor do saque deve ser maior que zero.")
                     continue # volta ao inicio do loop
                 self.saque(numero_conta_saque, valor_saque, data_transação)
+
+            elif opção == "5": # Realizar transferencia
+                numero_conta_pagadora = input("Digite o número da conta pagadora: ")
+                numero_conta_recebedora = input("Digite o número da conta que irá receber: ")
+                if numero_conta_pagadora != numero_conta_recebedora:
+                    try: valor_transferencia = float(input("Digite o valor da transferência: "))
+                    except ValueError:
+                        print("O valor digitado é inválido")
+                        continue # volta ao inicio do loop
+                    if valor_transferencia <=0:
+                        print("O valor da transferencia deve ser maior que zero.")
+                        continue
+                    self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, data_transação)
+                else:
+                    print("As contas não podem ser iguais.")
 
             elif opção == "0":
                 print("Encerrando o programa...")
