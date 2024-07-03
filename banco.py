@@ -131,7 +131,7 @@ class Banco:
         else: # a conta não foi encontrada
             print(f"Conta {numero_conta} não encontrada, por favor, tente novamente.")
 
-    def transferencia(self, numero_conta_pagadora, numero_conta_recebedora, valor, data):
+    def transferencia(self, numero_conta_pagadora, numero_conta_recebedora, valor, senha, data):
         """
         Função para realizar transferencia entre contas existentes
 
@@ -147,21 +147,25 @@ class Banco:
             self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta_recebedora,))
             resultado = self.cursor.fetchone()
             if resultado:
-                if self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] >= valor:
-                    self.contas[numero_conta_recebedora]["detalhe_conta"]["saldo"] += valor
-                    self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] -= valor
-                    print(f"Transferência realizada com sucesso. Seu novo saldo é {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
-                    self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], True, data)
-                    self.historico(numero_conta_recebedora, "Transferencia Crédito", self.contas[numero_conta_recebedora]['detalhe_conta']['saldo'], True, data)
+                resultado = self.verificar_senha(numero_conta_pagadora, senha)
+                if resultado:
+                    if self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] >= valor:
+                        self.contas[numero_conta_recebedora]["detalhe_conta"]["saldo"] += valor
+                        self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] -= valor
+                        print(f"Transferência realizada com sucesso. Seu novo saldo é {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
+                        self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], True, data)
+                        self.historico(numero_conta_recebedora, "Transferencia Crédito", self.contas[numero_conta_recebedora]['detalhe_conta']['saldo'], True, data)
+                    else:
+                        print(f"Saldo insuficiente. Seu saldo é de R$ {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
+                        self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], False, data)
                 else:
-                    print(f"Saldo insuficiente. Seu saldo é de R$ {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
-                    self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], False, data)
+                    print("Senha incorreta. Por favor, tente novamente.")
             else:
                 print(f"A conta {numero_conta_recebedora}, não existe.")
         else:
             print(f"A conta {numero_conta_pagadora}, não existe.")
 
-    def saque(self, numero_conta, valor, data):
+    def saque(self, numero_conta, valor, senha, data):
         """
         Realiza o saque, verifica se na conta existe saldo e faz o saque. mostra o novo valor do saldo após o saque
 
@@ -182,14 +186,18 @@ class Banco:
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado:
-            if self.contas[numero_conta]["detalhe_conta"]["saldo"] > valor:
-                self.contas[numero_conta]["detalhe_conta"]["saldo"] -= valor
-                novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
-                print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {novo_saldo:.2f}")
-                self.historico(numero_conta, "Saque", novo_saldo, True, data)
-            else: # se a conta não possuir o saldo necessário para o saque, irá aparecer mensagem de saldo insuficiente
-                print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {self.contas[numero_conta]['detalhe_conta']['saldo']:.2f}.")
-                self.historico(numero_conta, "Saque", self.contas[numero_conta]['detalhe_conta']['saldo'], False, data)
+            resultado = self.verificar_senha(numero_conta, senha)
+            if resultado:
+                if self.contas[numero_conta]["detalhe_conta"]["saldo"] > valor:
+                    self.contas[numero_conta]["detalhe_conta"]["saldo"] -= valor
+                    novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
+                    print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {novo_saldo:.2f}")
+                    self.historico(numero_conta, "Saque", novo_saldo, True, data)
+                else: # se a conta não possuir o saldo necessário para o saque, irá aparecer mensagem de saldo insuficiente
+                    print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {self.contas[numero_conta]['detalhe_conta']['saldo']:.2f}.")
+                    self.historico(numero_conta, "Saque", self.contas[numero_conta]['detalhe_conta']['saldo'], False, data)
+            else:
+                print("Senha fornecida incorreta. Por favor, tente novamente.")
         else: # a conta não foi encontrada
             print("Conta não encontrada, por favor, tente novamente.")
 
@@ -270,18 +278,20 @@ Escolha uma opção abaixo:
                 self.depositar(deposito_conta, deposito_valor, data_transação)
 
             elif opção == "4": # Realizar saque
-                numero_conta_saque = input("Digite o número da conta para o saque: ")
-                try: valor_saque = float(input("Digite o valor do saque: "))
+                saque_numero_conta = input("Digite o número da conta para o saque: ")
+                saque_senha = input(f"Digite a sua senha da conta {saque_numero_conta}: ")
+                try: saque_valor = float(input("Digite o valor do saque: "))
                 except ValueError: 
                     print("Valor inválido. Por favor, insira um valor númerico")
                     continue # volta ao inicio do loop
-                if valor_saque <=0:
+                if saque_valor <=0:
                     print("O valor do saque deve ser maior que zero.")
                     continue # volta ao inicio do loop
-                self.saque(numero_conta_saque, valor_saque, data_transação)
+                self.saque(saque_numero_conta, saque_valor, saque_senha, data_transação)
 
             elif opção == "5": # Realizar transferencia
                 numero_conta_pagadora = input("Digite o número da conta pagadora: ")
+                senha_conta_pagadora = input(f"digite a senha da conta {numero_conta_pagadora}: ")
                 numero_conta_recebedora = input("Digite o número da conta que irá receber: ")
                 if numero_conta_pagadora != numero_conta_recebedora:
                     try: valor_transferencia = float(input("Digite o valor da transferência: "))
@@ -291,7 +301,7 @@ Escolha uma opção abaixo:
                     if valor_transferencia <=0:
                         print("O valor da transferencia deve ser maior que zero.")
                         continue
-                    self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, data_transação)
+                    self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, senha_conta_pagadora, data_transação)
                 else:
                     print("As contas não podem ser iguais.")
 
