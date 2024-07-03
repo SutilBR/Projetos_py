@@ -1,5 +1,7 @@
 import datetime
 import sqlite3
+import hashlib
+import secrets
 
 class Banco:
     def __init__(self, conexao):
@@ -11,13 +13,23 @@ class Banco:
                        (id INTEGER PRIMARY KEY, Numero_conta TEXT, Descricao TEXT, Saldo REAL, Status TEXT, Data TEXT)""")
         conexao.commit()
         cursor.execute("""CREATE TABLE IF NOT EXISTS user
-                       (id INTEGER PRIMARY KEY, Numero_conta TEXT, nome TEXT, senha text, Data TEXT)""")
+                       (id INTEGER PRIMARY KEY, Numero_conta TEXT, nome TEXT, senha TEXT, salt TEXT, Data TEXT)""")
         conexao.commit()
+
+    @staticmethod
+    def hash_senha(senha):
+        salt = secrets.token_hex(16) # Gerar um salt seguro usando secrets, 16 bytes de salt em formato hex
+        hasher = hashlib.sha256() # Criar um objeto de hash SHA-256
+        senha_com_salt = senha.encode('utf-8') + salt.encode('utf-8') # Concatenar a senha com o salt
+        #Calcular o hash da senha com salt
+        hasher.update(senha_com_salt)
+        hash_resultante = hasher.hexdigest()
+        return hash_resultante, salt # Retornar o hash_resultante e o salt para armazenamento no banco de dados
 
     def adicionar_conta(self, numero_conta, detalhe_conta, senha, data):
         """
         Adicionar contas, fazendo a verificação se essa conta já existe
-        
+
         Args:
             numero_conta: numero da conta
             detalhe_conta: detalhe da conta, nome, e saldo
@@ -29,12 +41,44 @@ class Banco:
             print(f"A conta {numero_conta} Já existe")
             return False
         else: # Cria a conta e adiciona o histórico dela
+            #gerar o hash dasenha e o salt
+            hash_senha, salt = self.hash_senha(senha)
+
             self.contas[numero_conta] = {"detalhe_conta": detalhe_conta, "historico":[]}
             self.historico(numero_conta, "Conta criada", 0, True, data)
-            self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], senha, data)
+            self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], hash_senha, salt, data)
             print(f"A conta {numero_conta} foi adicionada com sucesso. {detalhe_conta}")
+    
+    def verificar_senha(self, numero_conta, senha):
+        """Verifica se a senha fornecida corresponde a senha armazenada
+        Args:
+        numero_conta: numero da conta
+        senha: senha fornecida pelo usuario
+
+        returns:
+        true se a senha está correta, false se não estiver correta
+        """
+        self.cursor.execute("SELECT senha, salt FROM user WHERE Numero_conta = ?", (numero_conta,))
+        resultado = self.cursor.fetchone()
+
+        if resultado:
+            hash_armazenado = resultado[0]
+            salt = resultado[1]
+            #calcular ohash da senha fornecida pelo usuário com o salt armazenado
+            hasher = hashlib.sha256()
+            senha_com_salt = senha.encode('utf-8') + salt.encode('utf-8')
+            hasher.update(senha_com_salt)
+            hash_fornecido = hasher.hexdigest()
+
+            # comparar os hasher
+            if hash_fornecido == hash_armazenado:
+                return True
+            else:
+                return False
+        else:
+            return False
         
-    def verificar_conta(self, numero_conta, data):
+    def verificar_conta(self, numero_conta, senha, data):
         """
         Verificar a conta, se a conta não existe, iremos verificar se a pessoa quer fazer uma conta
 
@@ -46,12 +90,16 @@ class Banco:
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado:
-            detalhes_conta = self.contas[numero_conta]["detalhe_conta"]
-            saldo = detalhes_conta["saldo"]
-            print(f"Detalhes da conta: {detalhes_conta}")
-            self.historico(numero_conta, "Conta verificada", saldo, True, data)
-            conta_historico = self.contas[numero_conta]["historico"]
-            print(f"Histórico da conta: \n {conta_historico}")
+            resultado = self.verificar_senha(numero_conta, senha)
+            if resultado:
+                detalhes_conta = self.contas[numero_conta]["detalhe_conta"]
+                saldo = detalhes_conta["saldo"]
+                print(f"Detalhes da conta: {detalhes_conta}")
+                self.historico(numero_conta, "Conta verificada", saldo, True, data)
+                conta_historico = self.contas[numero_conta]["historico"]
+                print(f"Histórico da conta: \n {conta_historico}")
+            else:
+                print("Senha fornecida incorreta. Por favor, tente novamente")
         else: # a conta não existe, e dá a opção de criar uma nova conta
             print(f"A conta {numero_conta} não foi encontrada.")
             bool_conta = input("Você deseja criar uma nova conta? (Sim/Não)") 
@@ -59,6 +107,8 @@ class Banco:
                 nova_conta = input("Informe o Nº da conta que deseja: ")
                 nova_detalhes_nome = input("Digite o nome do titular: ")
                 self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data)
+            elif bool_conta.lower() == "não":
+                print("Retornando para o Menu")
             else:
                 print("Não entendi a sua resposta. Voltando para o Menu...")
 
@@ -167,16 +217,17 @@ class Banco:
                         (historico["Numero_conta"], historico["Descricao"], historico["Saldo"], historico["Status"], historico["Data"]))
         conexao.commit()
 
-    def historico_cadastro(self, numero_conta, nome, senha, data):
+    def historico_cadastro(self, numero_conta, nome, senha, salt, data):
         historico_cadastro = {
             "Numero_conta": numero_conta,
             "Nome": nome,
             "Password": senha,
+            "Salt": salt,
             "Data": data.strftime("%d-%m-%Y %H:%M:%S")
             }
         cursor = conexao.cursor()
-        cursor.execute("INSERT INTO user (Numero_conta, Nome, senha, Data) VALUES (?, ?, ?, ?)",
-                    (historico_cadastro["Numero_conta"], historico_cadastro["Nome"], historico_cadastro["Password"], historico_cadastro["Data"]))
+        cursor.execute("INSERT INTO user (Numero_conta, Nome, senha, Salt, Data) VALUES (?, ?, ?, ?, ?)",
+                    (historico_cadastro["Numero_conta"], historico_cadastro["Nome"], historico_cadastro["Password"], historico_cadastro["Salt"], historico_cadastro["Data"]))
         conexao.commit()
 
     def menu_principal(self):
@@ -203,7 +254,8 @@ Escolha uma opção abaixo:
                 
             elif opção == "2": # Verificar conta
                 verificar_conta = input("Digite o número da conta que deseja verificar: ")
-                self.verificar_conta(verificar_conta, data_transação)
+                verificar_senha = input(f"Digite a sua senha da conta {verificar_conta}: ")
+                self.verificar_conta(verificar_conta, verificar_senha, data_transação)
 
             elif opção == "3": # Realiza deposito
                 deposito_conta = input("Digite o número da conta para o depósito: ")
