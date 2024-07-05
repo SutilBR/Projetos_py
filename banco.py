@@ -37,14 +37,13 @@ class Banco:
         """
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
-        if resultado: # se a conta já existir irá aparecer essa mensagem
+        if resultado: # Se a conta já existir irá aparecer essa mensagem
             print(f"A conta {numero_conta} Já existe")
             return False
         else: # Cria a conta e adiciona o histórico dela
-            #gerar o hash dasenha e o salt
+            # Gerar o hash dasenha e o salt
             hash_senha, salt = self.hash_senha(senha)
-
-            self.contas[numero_conta] = {"detalhe_conta": detalhe_conta, "historico":[]}
+            # Historico
             self.historico(numero_conta, "Conta criada", 0, True, data)
             self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], hash_senha, salt, data)
             print(f"A conta {numero_conta} foi adicionada com sucesso. {detalhe_conta}")
@@ -92,12 +91,25 @@ class Banco:
         if resultado:
             resultado = self.verificar_senha(numero_conta, senha)
             if resultado:
-                detalhes_conta = self.contas[numero_conta]["detalhe_conta"]
-                saldo = detalhes_conta["saldo"]
-                print(f"Detalhes da conta: {detalhes_conta}")
+                detalhes_conta = """
+                SELECT *
+                FROM historico
+                WHERE Numero_conta = ?
+                """
+                self.cursor.execute(detalhes_conta, (numero_conta,))
+                detalhes_conta = self.cursor.fetchall()
+                print(f"Detalhes da conta {numero_conta} \n {detalhes_conta}\n")
+                saldo = """
+                SELECT Saldo 
+                FROM historico 
+                WHERE Numero_conta = ? 
+                ORDER BY id DESC 
+                LIMIT 1"""
+                self.cursor.execute(saldo,(numero_conta,))
+                resultado = self.cursor.fetchone()
+                saldo = resultado[0]
+                print(f"Seu saldo é de R$ {saldo}")
                 self.historico(numero_conta, "Conta verificada", saldo, True, data)
-                conta_historico = self.contas[numero_conta]["historico"]
-                print(f"Histórico da conta: \n {conta_historico}")
             else:
                 print("Senha fornecida incorreta. Por favor, tente novamente")
         else: # a conta não existe, e dá a opção de criar uma nova conta
@@ -219,7 +231,6 @@ class Banco:
             "Status": "Sucesso" if bool_teste else "Falha",
             "Data": data.strftime("%d-%m-%Y %H:%M:%S")
         }
-        self.contas[numero_conta]["historico"].append(historico)
         cursor = conexao.cursor()
         cursor.execute("INSERT INTO historico (Numero_conta, Descricao, Saldo, Status, Data) VALUES (?, ?, ?, ?, ?)",
                         (historico["Numero_conta"], historico["Descricao"], historico["Saldo"], historico["Status"], historico["Data"]))
