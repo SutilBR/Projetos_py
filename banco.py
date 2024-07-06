@@ -136,10 +136,18 @@ class Banco:
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado:
-            self.contas[numero_conta]["detalhe_conta"]["saldo"] += valor
-            novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
-            print(f"Seu novo saldo é de R$ {novo_saldo}")
-            self.historico(numero_conta, "Depósito", novo_saldo, True, data)
+            detalhe_contas = """
+            SELECT Saldo
+            FROM historico
+            WHERE Numero_conta = ?
+            ORDER BY id DESC
+            LIMIT 1"""
+            self.cursor.execute(detalhe_contas, (numero_conta,))
+            resultado = self.cursor.fetchone()
+            saldo = resultado[0]
+            saldo += valor
+            print(f"Seu novo saldo é de R$ {saldo:.2f}")
+            self.historico(numero_conta, "Depósito", saldo, True, data)
         else: # a conta não foi encontrada
             print(f"Conta {numero_conta} não encontrada, por favor, tente novamente.")
 
@@ -161,15 +169,33 @@ class Banco:
             if resultado:
                 resultado = self.verificar_senha(numero_conta_pagadora, senha)
                 if resultado:
-                    if self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] >= valor:
-                        self.contas[numero_conta_recebedora]["detalhe_conta"]["saldo"] += valor
-                        self.contas[numero_conta_pagadora]["detalhe_conta"]["saldo"] -= valor
-                        print(f"Transferência realizada com sucesso. Seu novo saldo é {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
-                        self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], True, data)
-                        self.historico(numero_conta_recebedora, "Transferencia Crédito", self.contas[numero_conta_recebedora]['detalhe_conta']['saldo'], True, data)
+                    detalhe_contas = """
+                    SELECT Saldo
+                    FROM historico
+                    WHERE Numero_conta = ?
+                    ORDER BY id DESC
+                    LIMIT 1"""
+                    self.cursor.execute(detalhe_contas, (numero_conta_pagadora,))
+                    resultado = self.cursor.fetchone()
+                    saldo_pagadora = resultado[0]
+                    if saldo_pagadora >= valor:
+                        detalhe_contas = """
+                        SELECT Saldo
+                        FROM historico
+                        WHERE Numero_conta = ?
+                        ORDER BY id DESC
+                        LIMIT 1"""
+                        self.cursor.execute(detalhe_contas, (numero_conta_recebedora,))
+                        resultado = self.cursor.fetchone()
+                        saldo_recebedora = resultado[0]
+                        saldo_recebedora += valor
+                        saldo_pagadora -= valor
+                        print(f"Transferência realizada com sucesso. Seu novo saldo é {saldo_pagadora}")
+                        self.historico(numero_conta_pagadora, "Transferencia Débito", saldo_pagadora, True, data)
+                        self.historico(numero_conta_recebedora, "Transferencia Crédito", saldo_recebedora, True, data)
                     else:
-                        print(f"Saldo insuficiente. Seu saldo é de R$ {self.contas[numero_conta_pagadora]['detalhe_conta']['saldo']}")
-                        self.historico(numero_conta_pagadora, "Transferencia Débito", self.contas[numero_conta_pagadora]['detalhe_conta']['saldo'], False, data)
+                        print(f"Saldo insuficiente. Seu saldo é de R$ {saldo_pagadora}")
+                        self.historico(numero_conta_pagadora, "Transferencia Débito", saldo_pagadora, False, data)
                 else:
                     print("Senha incorreta. Por favor, tente novamente.")
             else:
@@ -200,14 +226,22 @@ class Banco:
         if resultado:
             resultado = self.verificar_senha(numero_conta, senha)
             if resultado:
-                if self.contas[numero_conta]["detalhe_conta"]["saldo"] > valor:
-                    self.contas[numero_conta]["detalhe_conta"]["saldo"] -= valor
-                    novo_saldo = self.contas[numero_conta]["detalhe_conta"]["saldo"]
-                    print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {novo_saldo:.2f}")
-                    self.historico(numero_conta, "Saque", novo_saldo, True, data)
+                detalhe_contas = """
+                SELECT Saldo
+                FROM historico
+                WHERE Numero_conta = ?
+                ORDER BY id DESC
+                LIMIT 1"""
+                self.cursor.execute(detalhe_contas, (numero_conta,))
+                resultado = self.cursor.fetchone()
+                saldo = resultado[0]
+                if saldo >= valor:
+                    saldo -= valor
+                    print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {saldo:.2f}")
+                    self.historico(numero_conta, "Saque", saldo, True, data)
                 else: # se a conta não possuir o saldo necessário para o saque, irá aparecer mensagem de saldo insuficiente
-                    print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {self.contas[numero_conta]['detalhe_conta']['saldo']:.2f}.")
-                    self.historico(numero_conta, "Saque", self.contas[numero_conta]['detalhe_conta']['saldo'], False, data)
+                    print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {saldo:.2f}.")
+                    self.historico(numero_conta, "Saque", saldo, False, data)
             else:
                 print("Senha fornecida incorreta. Por favor, tente novamente.")
         else: # a conta não foi encontrada
