@@ -2,6 +2,12 @@ import datetime
 import sqlite3
 import hashlib
 import secrets
+import tkinter as tk
+import sys
+conta = ""
+nome = ""
+senha = ""
+valor_banco = ""
 
 class Banco:
     def __init__(self, conexao):
@@ -38,7 +44,12 @@ class Banco:
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado: # Se a conta já existir irá aparecer essa mensagem
-            print(f"A conta {numero_conta} Já existe")
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("A conta já existe")
+            janela_adicionar.geometry("300x50")
+            label_conta = tk.Label(janela_adicionar, text=f"Desculpe, a conta  informada já existe no nosso sistema.")
+            label_conta.pack(pady=10)
+            janela_adicionar.mainloop()
             return False
         else: # Cria a conta e adiciona o histórico dela
             # Gerar o hash dasenha e o salt
@@ -46,7 +57,11 @@ class Banco:
             # Historico
             self.historico(numero_conta, "Conta criada", 0, True, data)
             self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], hash_senha, salt, data)
-            print(f"A conta {numero_conta} foi adicionada com sucesso. {detalhe_conta}")
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Conta Adicionada com sucesso")
+            label_conta = tk.Label(janela_adicionar, text=f"A conta {numero_conta} foi adicionada com sucesso")
+            label_conta.pack(pady=10)
+            janela_adicionar.mainloop()
     
     def verificar_senha(self, numero_conta, senha):
         """Verifica se a senha fornecida corresponde a senha armazenada
@@ -98,7 +113,8 @@ class Banco:
                 """
                 self.cursor.execute(detalhes_conta, (numero_conta,))
                 detalhes_conta = self.cursor.fetchall()
-                print(f"Detalhes da conta {numero_conta} \n {detalhes_conta}\n")
+                for detalhes in detalhes_conta:
+                    print(detalhes)
                 saldo = """
                 SELECT Saldo 
                 FROM historico 
@@ -113,16 +129,7 @@ class Banco:
             else:
                 print("Senha fornecida incorreta. Por favor, tente novamente")
         else: # a conta não existe, e dá a opção de criar uma nova conta
-            print(f"A conta {numero_conta} não foi encontrada.")
-            bool_conta = input("Você deseja criar uma nova conta? (Sim/Não)") 
-            if bool_conta.lower() == "sim":
-                nova_conta = input("Informe o Nº da conta que deseja: ")
-                nova_detalhes_nome = input("Digite o nome do titular: ")
-                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, data)
-            elif bool_conta.lower() == "não":
-                print("Retornando para o Menu")
-            else:
-                print("Não entendi a sua resposta. Voltando para o Menu...")
+            print(f"A conta {numero_conta} não foi encontrada.\nSe você deseja criar uma nova conta, por favor clique em 'Adicionar Conta' no menu principal.")
 
     def depositar(self, numero_conta, valor, data):
         """
@@ -286,8 +293,7 @@ class Banco:
     def menu_principal(self):
         """Menu interativo para os usuarios com as opções para o sistema"""
         
-        while True:
-            menu = ("""
+        menu = ("""
 Escolha uma opção abaixo:
 [1] Adicionar Conta
 [2] Verificar Conta
@@ -296,67 +302,164 @@ Escolha uma opção abaixo:
 [5] Realizar transferência
 [0] Sair
 """)
-            opção = input(menu)
+            
+        botoes = ["button_verificar", "button_adicionar", "button_deposito", "button_saque", "button_transferencia"]
+
+        def on_adicionar(): # Adicionar conta
             data_transação = datetime.datetime.now()
-
-            if opção == "1": # Adicionar conta
-                nova_conta = input("Informe o Nº da conta que deseja: ")
-                nova_detalhes_nome = input("Digite o nome do titular: ")
-                nova_senha = input("Informe a senha da conta: ")
-                self.adicionar_conta(nova_conta, {"nome_titular": nova_detalhes_nome, "saldo": 0}, nova_senha, data_transação)
-                
-            elif opção == "2": # Verificar conta
-                verificar_conta = input("Digite o número da conta que deseja verificar: ")
-                verificar_senha = input(f"Digite a sua senha da conta {verificar_conta}: ")
-                self.verificar_conta(verificar_conta, verificar_senha, data_transação)
-
-            elif opção == "3": # Realiza deposito
-                deposito_conta = input("Digite o número da conta para o depósito: ")
-                try: 
-                    deposito_valor = float(input("Digite o valor do depósito: "))
-                except ValueError:
-                    print("Valor inválido. Por favor, insira um valor númerico")
-                    continue # volta ao inicio do loop
-                if  deposito_valor <=0:
-                    print("O valor do depósito deve ser maior do que zero.")
-                    continue # volta ao inicio do loop
-                self.depositar(deposito_conta, deposito_valor, data_transação)
-
-            elif opção == "4": # Realizar saque
-                saque_numero_conta = input("Digite o número da conta para o saque: ")
-                saque_senha = input(f"Digite a sua senha da conta {saque_numero_conta}: ")
-                try: saque_valor = float(input("Digite o valor do saque: "))
-                except ValueError: 
-                    print("Valor inválido. Por favor, insira um valor númerico")
-                    continue # volta ao inicio do loop
-                if saque_valor <=0:
-                    print("O valor do saque deve ser maior que zero.")
-                    continue # volta ao inicio do loop
-                self.saque(saque_numero_conta, saque_valor, saque_senha, data_transação)
-
-            elif opção == "5": # Realizar transferencia
-                numero_conta_pagadora = input("Digite o número da conta pagadora: ")
-                senha_conta_pagadora = input(f"digite a senha da conta {numero_conta_pagadora}: ")
-                numero_conta_recebedora = input("Digite o número da conta que irá receber: ")
-                if numero_conta_pagadora != numero_conta_recebedora:
-                    try: valor_transferencia = float(input("Digite o valor da transferência: "))
-                    except ValueError:
-                        print("O valor digitado é inválido")
-                        continue # volta ao inicio do loop
-                    if valor_transferencia <=0:
-                        print("O valor da transferencia deve ser maior que zero.")
-                        continue
-                    self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, senha_conta_pagadora, data_transação)
+            def pegar_valor():
+                conta = entry_conta.get()
+                nome = entry_nome.get()
+                senha = entry_senha.get()
+                janela_adicionar.destroy()
+                if conta and nome and senha:
+                    Banco.adicionar_conta(conta, {"nome_titular": nome, "saldo": 0}, senha, data_transação)
                 else:
-                    print("As contas não podem ser iguais.")
+                    print("Por favor, preencha todos os campos.")
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Adicionar Conta")
 
-            elif opção == "0":
-                print("Encerrando o programa...")
-                self.conexao.close()
-                break
+            # Label e Entry para inserir o número da conta
+            label_conta = tk.Label(janela_adicionar, text="Insira o número da Conta que você deseja:")
+            label_conta.pack(pady=10)
+
+            entry_conta = tk.Entry(janela_adicionar, width=30)
+            entry_conta.pack()
+
+            # Label e Entry para inserir o nome do titular
+            label_nome = tk.Label(janela_adicionar, text="Digite o nome do titular:")
+            label_nome.pack(pady=10)
+
+            entry_nome = tk.Entry(janela_adicionar, width=30)
+            entry_nome.pack()
+
+            # Label e Entry para inserir a senha
+            label_senha = tk.Label(janela_adicionar, text="Informe a senha da conta:")
+            label_senha.pack(pady=10)
+
+            entry_senha = tk.Entry(janela_adicionar, width=30, show="*")  # Mostra '*' no lugar da senha
+            entry_senha.pack()
+
+            # Botão para enviar dados
+            btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
+            btn_adicionar.pack()
+
+            janela_adicionar.mainloop()
                 
+        def on_verificar(): # Verificar conta
+            data_transação = datetime.datetime.now()
+            def pegar_valor():
+                conta = entry_conta.get()
+                senha = entry_senha.get()
+                print(conta, senha)
+                janela_adicionar.destroy()
+                if conta and senha:
+                    Banco.verificar_conta(conta, senha, data_transação)
+                else:
+                    print("Por favor, preencha todos os campos.")
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Verificar Conta")
+
+            # Label e Entry para inserir o número da conta
+            label_conta = tk.Label(janela_adicionar, text="Insira o número da conta:")
+            label_conta.pack(pady=10)
+
+            entry_conta = tk.Entry(janela_adicionar, width=30)
+            entry_conta.pack()
+
+            # Label e Entry para inserira senha
+            label_senha = tk.Label(janela_adicionar, text="Informe a senha da conta:")
+            label_senha.pack()
+
+            entry_senha = tk.Entry(janela_adicionar, width=30, show="*")
+            entry_senha.pack()
+
+            # Botão para enviar dados
+            btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
+            btn_adicionar.pack()
+
+            #Executar janela
+            janela_adicionar.mainloop()
+
+        def on_deposito(): # Realiza deposito
+            data_transação = datetime.datetime.now()
+            deposito_conta = input("Digite o número da conta para o depósito: ")
+            try: 
+                deposito_valor = float(input("Digite o valor do depósito: "))
+            except ValueError:
+                print("Valor inválido. Por favor, insira um valor númerico")
+                root.mainloop() # volta ao inicio do loop
+            if  deposito_valor <=0:
+                print("O valor do depósito deve ser maior do que zero.")
+                root.mainloop() # volta ao inicio do loop
+            self.depositar(deposito_conta, deposito_valor, data_transação)
+
+        def on_saque(): # Realizar saque
+            data_transação = datetime.datetime.now()
+            saque_numero_conta = input("Digite o número da conta para o saque: ")
+            saque_senha = input(f"Digite a sua senha da conta {saque_numero_conta}: ")
+            try: saque_valor = float(input("Digite o valor do saque: "))
+            except ValueError: 
+                print("Valor inválido. Por favor, insira um valor númerico")
+                root.mainloop() # volta ao inicio do loop
+            if saque_valor <=0:
+                print("O valor do saque deve ser maior que zero.")
+                root.mainloop() # volta ao inicio do loop
+            self.saque(saque_numero_conta, saque_valor, saque_senha, data_transação)
+
+        def on_transferencia(): # Realizar transferencia
+            data_transação = datetime.datetime.now()
+            numero_conta_pagadora = input("Digite o número da conta pagadora: ")
+            senha_conta_pagadora = input(f"digite a senha da conta {numero_conta_pagadora}: ")
+            numero_conta_recebedora = input("Digite o número da conta que irá receber: ")
+            if numero_conta_pagadora != numero_conta_recebedora:
+                try: valor_transferencia = float(input("Digite o valor da transferência: "))
+                except ValueError:
+                    print("O valor digitado é inválido")
+                    root.mainloop() # volta ao inicio do loop
+                if valor_transferencia <=0:
+                    print("O valor da transferencia deve ser maior que zero.")
+                    root.mainloop()
+                self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, senha_conta_pagadora, data_transação)
             else:
-                print("Opção inválida. Por favor, escolha uma as opções existentes no MENU")
+                print("As contas não podem ser iguais.")
+
+        def on_close():
+            print("Encerrando o programa...")
+            self.conexao.close()
+            root.destroy()
+            root.quit()
+            sys.exit()
+
+        #tkinter
+        # Janela principal
+        root = tk.Tk()
+        root.title("Banco")
+
+        # Criar um rótulo
+        label = tk.Label(root, text=menu)
+        label.pack(pady=10)
+
+        # Criar um botão na janela
+        button_adicionar = tk.Button(root,text="Adicionar Conta", command=on_adicionar)
+        button_adicionar.pack(pady=10)
+
+        button_verificar = tk.Button(root,text="Verificar Conta", command=on_verificar)
+        button_verificar.pack(pady=10)
+
+        button_deposito = tk.Button(root,text="Realizar Depósito", command=on_deposito)
+        button_deposito.pack(pady=10)
+            
+        button_saque = tk.Button(root,text="Realizar Saque", command=on_saque)
+        button_saque.pack(pady=10)
+
+        button_transferencia = tk.Button(root,text="Realizar Transferência", command=on_transferencia)
+        button_transferencia.pack(pady=10)
+
+        button_saida = tk.Button(root,text="Encerrar Sistema", command=on_close)
+        button_saida.pack(pady=10)
+
+        root.mainloop()
 
 if __name__ == "__main__":
     conexao = sqlite3.connect("Banco.db")
