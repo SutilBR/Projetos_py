@@ -3,6 +3,7 @@ import sqlite3
 import hashlib
 import secrets
 import tkinter as tk
+from tkinter import messagebox
 import sys
 conta = ""
 nome = ""
@@ -44,24 +45,14 @@ class Banco:
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado: # Se a conta já existir irá aparecer essa mensagem
-            janela_adicionar = tk.Toplevel()
-            janela_adicionar.title("A conta já existe")
-            janela_adicionar.geometry("300x50")
-            label_conta = tk.Label(janela_adicionar, text=f"Desculpe, a conta  informada já existe no nosso sistema.")
-            label_conta.pack(pady=10)
-            janela_adicionar.mainloop()
-            return False
+            messagebox.showerror("Conta já existe", f"A conta {numero_conta} já existe no sistema.")
         else: # Cria a conta e adiciona o histórico dela
             # Gerar o hash dasenha e o salt
             hash_senha, salt = self.hash_senha(senha)
             # Historico
             self.historico(numero_conta, "Conta criada", 0, True, data)
             self.historico_cadastro(numero_conta, detalhe_conta["nome_titular"], hash_senha, salt, data)
-            janela_adicionar = tk.Toplevel()
-            janela_adicionar.title("Conta Adicionada com sucesso")
-            label_conta = tk.Label(janela_adicionar, text=f"A conta {numero_conta} foi adicionada com sucesso")
-            label_conta.pack(pady=10)
-            janela_adicionar.mainloop()
+            messagebox.showinfo("Conta adicionada", f"A conta {numero_conta} foi adicionada com sucesso")
     
     def verificar_senha(self, numero_conta, senha):
         """Verifica se a senha fornecida corresponde a senha armazenada
@@ -100,36 +91,17 @@ class Banco:
             numero_conta: numero da conta
             data: data
         """
-
         self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
         resultado = self.cursor.fetchone()
         if resultado:
-            resultado = self.verificar_senha(numero_conta, senha)
-            if resultado:
-                detalhes_conta = """
-                SELECT *
-                FROM historico
-                WHERE Numero_conta = ?
-                """
-                self.cursor.execute(detalhes_conta, (numero_conta,))
-                detalhes_conta = self.cursor.fetchall()
-                for detalhes in detalhes_conta:
-                    print(detalhes)
-                saldo = """
-                SELECT Saldo 
-                FROM historico 
-                WHERE Numero_conta = ? 
-                ORDER BY id DESC 
-                LIMIT 1"""
-                self.cursor.execute(saldo,(numero_conta,))
-                resultado = self.cursor.fetchone()
-                saldo = resultado[0]
-                print(f"Seu saldo é de R$ {saldo}")
+            if self.verificar_senha(numero_conta, senha):
+                saldo = self.obter_saldo_atual(numero_conta)
+                messagebox.showinfo("Saldo Atual", f"Seu saldo é de R$ {saldo:.2f}")
                 self.historico(numero_conta, "Conta verificada", saldo, True, data)
             else:
-                print("Senha fornecida incorreta. Por favor, tente novamente")
+                messagebox.showerror("Senha Incorreta", "Senha fornecida incorreta. Por favor, tente novamente")
         else: # a conta não existe, e dá a opção de criar uma nova conta
-            print(f"A conta {numero_conta} não foi encontrada.\nSe você deseja criar uma nova conta, por favor clique em 'Adicionar Conta' no menu principal.")
+            messagebox.showerror("Conta não encontrada",f"A conta {numero_conta} não foi encontrada.\nSe você deseja criar uma nova conta, por favor clique em 'Adicionar Conta' no menu principal.")
 
     def depositar(self, numero_conta, valor, data):
         """
@@ -140,23 +112,13 @@ class Banco:
             valor: valor do depósito
             data: data
         """
-        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
-        resultado = self.cursor.fetchone()
-        if resultado:
-            detalhe_contas = """
-            SELECT Saldo
-            FROM historico
-            WHERE Numero_conta = ?
-            ORDER BY id DESC
-            LIMIT 1"""
-            self.cursor.execute(detalhe_contas, (numero_conta,))
-            resultado = self.cursor.fetchone()
-            saldo = resultado[0]
-            saldo += valor
-            print(f"Seu novo saldo é de R$ {saldo:.2f}")
-            self.historico(numero_conta, "Depósito", saldo, True, data)
-        else: # a conta não foi encontrada
-            print(f"Conta {numero_conta} não encontrada, por favor, tente novamente.")
+        if valor  <= 0:
+            messagebox.showerror("Valor inválido", "O valor do depósito  deve ser maior que zero.")
+            return
+        saldo = self.obter_saldo_atual(numero_conta)
+        saldo = saldo + valor
+        self.historico(numero_conta, "Depósito", saldo, True, data)
+        messagebox.showinfo("Depósito Realizado", f"Depósito de R$ {valor:.2f} realizado com sucesso. Novo saldo:R$ {saldo:.2f}")
 
     def transferencia(self, numero_conta_pagadora, numero_conta_recebedora, valor, senha, data):
         """
@@ -168,47 +130,29 @@ class Banco:
             valor: valor da transferencia
             data: data da transação
         """
-        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta_pagadora,))
-        resultado = self.cursor.fetchone()
-        if resultado:
-            self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta_recebedora,))
-            resultado = self.cursor.fetchone()
-            if resultado:
-                resultado = self.verificar_senha(numero_conta_pagadora, senha)
-                if resultado:
-                    detalhe_contas = """
-                    SELECT Saldo
-                    FROM historico
-                    WHERE Numero_conta = ?
-                    ORDER BY id DESC
-                    LIMIT 1"""
-                    self.cursor.execute(detalhe_contas, (numero_conta_pagadora,))
-                    resultado = self.cursor.fetchone()
-                    saldo_pagadora = resultado[0]
-                    if saldo_pagadora >= valor:
-                        detalhe_contas = """
-                        SELECT Saldo
-                        FROM historico
-                        WHERE Numero_conta = ?
-                        ORDER BY id DESC
-                        LIMIT 1"""
-                        self.cursor.execute(detalhe_contas, (numero_conta_recebedora,))
-                        resultado = self.cursor.fetchone()
-                        saldo_recebedora = resultado[0]
-                        saldo_recebedora += valor
-                        saldo_pagadora -= valor
-                        print(f"Transferência realizada com sucesso. Seu novo saldo é {saldo_pagadora}")
-                        self.historico(numero_conta_pagadora, "Transferencia Débito", saldo_pagadora, True, data)
-                        self.historico(numero_conta_recebedora, "Transferencia Crédito", saldo_recebedora, True, data)
-                    else:
-                        print(f"Saldo insuficiente. Seu saldo é de R$ {saldo_pagadora}")
-                        self.historico(numero_conta_pagadora, "Transferencia Débito", saldo_pagadora, False, data)
-                else:
-                    print("Senha incorreta. Por favor, tente novamente.")
-            else:
-                print(f"A conta {numero_conta_recebedora}, não existe.")
-        else:
-            print(f"A conta {numero_conta_pagadora}, não existe.")
+        if numero_conta_pagadora == numero_conta_recebedora:
+            messagebox.showerror("Erro na transferência", "As contas de origem e destino não podem ser iguais.")
+            return
+        if valor <= 0:
+            messagebox.showerror("Valor inválido", "O valor datransferência deve ser maior do que zero")
+            return
+
+        if not self.verificar_senha(numero_conta_pagadora, senha):
+            messagebox.showerror("Senha incorreta", "Senha fornecida incorreta. Por favor, tente novamente")
+            return
+        
+        saldo = self.obter_saldo_atual(numero_conta_pagadora)
+        if saldo < valor:
+            messagebox.showerrors("Saldo Insuficiente", f"Saldo Insuficiente para transferência. Saldo atual: R${saldo:.2f}")
+            self.historico(numero_conta_pagadora, "Transferencia Débito", saldo, False, data)
+            return
+
+        saldo_destino = self.obter_saldo_atual(numero_conta_recebedora)
+        saldo = saldo - valor
+        saldo_destino = saldo_destino + valor
+        self.historico(numero_conta_pagadora, "Transferencia Débito", saldo, True, data)
+        self.historico(numero_conta_recebedora, "Transferencia Crédito", saldo_destino, True, data)
+        messagebox.showinfo("Transferência Realizada", f"Transferência de R$ {valor:.2f} realizada com sucesso. Seu saldo é de R$ {saldo:.2f}.")
 
     def saque(self, numero_conta, valor, senha, data):
         """
@@ -219,40 +163,24 @@ class Banco:
             valor: valor do saque
             data: data
         """
-        try:  
-            valor = float(valor) # Verificar se o valor é numérico
-        except ValueError: # tratamento de erro para se o valor não for numérico
-            print("Valor invalido. Por favor, insira um valor numérico.")
+
+        if valor <= 0:
+            messagebox.showerror("Valor Inválido", "O valor do saque deve ser maior que zero.")
             return
-        if valor <=0: # verifica se o saque é maior que zero
-            print("O valor do saque deve ser maior que zero.")
+        
+        if not self.verificar_senha(numero_conta, senha):
+            messagebox.showerror("Senha Incorreta", "Senha fornecida incorreta. Por favor, tente novamente.")
             return
 
-        self.cursor.execute("SELECT * FROM user WHERE Numero_conta = ?", (numero_conta,))
-        resultado = self.cursor.fetchone()
-        if resultado:
-            resultado = self.verificar_senha(numero_conta, senha)
-            if resultado:
-                detalhe_contas = """
-                SELECT Saldo
-                FROM historico
-                WHERE Numero_conta = ?
-                ORDER BY id DESC
-                LIMIT 1"""
-                self.cursor.execute(detalhe_contas, (numero_conta,))
-                resultado = self.cursor.fetchone()
-                saldo = resultado[0]
-                if saldo >= valor:
-                    saldo -= valor
-                    print(f"você sacou R$ {valor:.2f}. Seu novo saldo é de R$ {saldo:.2f}")
-                    self.historico(numero_conta, "Saque", saldo, True, data)
-                else: # se a conta não possuir o saldo necessário para o saque, irá aparecer mensagem de saldo insuficiente
-                    print(f"Não foi possivel continuar com a transação, seu saldo é insuficiente. Seu saldo R$ {saldo:.2f}.")
-                    self.historico(numero_conta, "Saque", saldo, False, data)
-            else:
-                print("Senha fornecida incorreta. Por favor, tente novamente.")
-        else: # a conta não foi encontrada
-            print("Conta não encontrada, por favor, tente novamente.")
+        saldo_atual = self.obter_saldo_atual(numero_conta)
+        if saldo_atual < valor:
+            messagebox.showerror("Saldo Insuficiente", f"Saldo insuficiente para saque. Saldo atual: R$ {saldo_atual:.2f}")
+            self.historico(numero_conta, "Saque", saldo_atual, False, data)
+            return
+
+        novo_saldo = saldo_atual - valor
+        self.historico(numero_conta, "Saque", novo_saldo, True, data)
+        messagebox.showinfo("Saque Realizado", f"Saque de R$ {valor:.2f} realizado com sucesso. Novo saldo: R$ {novo_saldo:.2f}")
 
     def historico(self, numero_conta, tipo, valor, bool_teste, data): # tipo(saque, deposito, criação), valor, status, data e hora
         """
@@ -290,6 +218,13 @@ class Banco:
                     (historico_cadastro["Numero_conta"], historico_cadastro["Nome"], historico_cadastro["Password"], historico_cadastro["Salt"], historico_cadastro["Data"]))
         conexao.commit()
 
+    def obter_saldo_atual(self, numero_conta):
+        self.cursor.execute("SELECT Saldo FROM historico WHERE Numero_conta = ? ORDER BY id DESC LIMIT 1", (numero_conta,))
+        resultado = self.cursor.fetchone()
+        if resultado:
+            return resultado[0]
+        return 0.0
+    
     def menu_principal(self):
         """Menu interativo para os usuarios com as opções para o sistema"""
         
@@ -303,8 +238,6 @@ Escolha uma opção abaixo:
 [0] Sair
 """)
             
-        botoes = ["button_verificar", "button_adicionar", "button_deposito", "button_saque", "button_transferencia"]
-
         def on_adicionar(): # Adicionar conta
             data_transação = datetime.datetime.now()
             def pegar_valor():
@@ -315,7 +248,7 @@ Escolha uma opção abaixo:
                 if conta and nome and senha:
                     Banco.adicionar_conta(conta, {"nome_titular": nome, "saldo": 0}, senha, data_transação)
                 else:
-                    print("Por favor, preencha todos os campos.")
+                    messagebox.showerror("Erro tente novamente", "Por favor preenhca todos os campos e tente novamente.")
             janela_adicionar = tk.Toplevel()
             janela_adicionar.title("Adicionar Conta")
 
@@ -351,81 +284,155 @@ Escolha uma opção abaixo:
             def pegar_valor():
                 conta = entry_conta.get()
                 senha = entry_senha.get()
-                print(conta, senha)
                 janela_adicionar.destroy()
                 if conta and senha:
                     Banco.verificar_conta(conta, senha, data_transação)
                 else:
-                    print("Por favor, preencha todos os campos.")
+                    messagebox.showerror("Erro, tente novamente", "Selecione a opção desejada e tente novamente, certifique-se de preencher todas as informações")
             janela_adicionar = tk.Toplevel()
             janela_adicionar.title("Verificar Conta")
 
             # Label e Entry para inserir o número da conta
             label_conta = tk.Label(janela_adicionar, text="Insira o número da conta:")
             label_conta.pack(pady=10)
-
             entry_conta = tk.Entry(janela_adicionar, width=30)
             entry_conta.pack()
 
             # Label e Entry para inserira senha
             label_senha = tk.Label(janela_adicionar, text="Informe a senha da conta:")
             label_senha.pack()
-
             entry_senha = tk.Entry(janela_adicionar, width=30, show="*")
             entry_senha.pack()
 
             # Botão para enviar dados
             btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
             btn_adicionar.pack()
-
             #Executar janela
             janela_adicionar.mainloop()
 
         def on_deposito(): # Realiza deposito
             data_transação = datetime.datetime.now()
-            deposito_conta = input("Digite o número da conta para o depósito: ")
-            try: 
-                deposito_valor = float(input("Digite o valor do depósito: "))
-            except ValueError:
-                print("Valor inválido. Por favor, insira um valor númerico")
-                root.mainloop() # volta ao inicio do loop
-            if  deposito_valor <=0:
-                print("O valor do depósito deve ser maior do que zero.")
-                root.mainloop() # volta ao inicio do loop
-            self.depositar(deposito_conta, deposito_valor, data_transação)
+            def pegar_valor():
+                conta = entry_conta.get()
+                valor_banco = entry_valor.get()
+                janela_adicionar.destroy()
+                if conta:
+                    try:
+                        valor_banco = float(valor_banco)
+                    except ValueError:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado não corresponde um valor númerico.")
+                        return
+                    if valor_banco <=0:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado deve ser maior do que zero.")
+                        return
+                    self.depositar(conta, valor_banco, data_transação)
+
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Realizar Depósito")
+            # Label e Entry para inserir o número da conta
+            label_conta = tk.Label(janela_adicionar, text="Insira o número da conta:")
+            label_conta.pack(pady=10)
+            entry_conta = tk.Entry(janela_adicionar, width=30)
+            entry_conta.pack()
+            # Label e Entry para inerir o valor
+            label_valor = tk.Label(janela_adicionar, text="Insira o valor do depósito:")
+            label_valor.pack(pady=10)
+            entry_valor = tk.Entry(janela_adicionar, width=30)
+            entry_valor.pack()
+            # Botão para enviar dados
+            btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
+            btn_adicionar.pack()
+            
+            janela_adicionar.mainloop()
 
         def on_saque(): # Realizar saque
             data_transação = datetime.datetime.now()
-            saque_numero_conta = input("Digite o número da conta para o saque: ")
-            saque_senha = input(f"Digite a sua senha da conta {saque_numero_conta}: ")
-            try: saque_valor = float(input("Digite o valor do saque: "))
-            except ValueError: 
-                print("Valor inválido. Por favor, insira um valor númerico")
-                root.mainloop() # volta ao inicio do loop
-            if saque_valor <=0:
-                print("O valor do saque deve ser maior que zero.")
-                root.mainloop() # volta ao inicio do loop
-            self.saque(saque_numero_conta, saque_valor, saque_senha, data_transação)
+            def pegar_valor():
+                conta = entry_conta.get()
+                valor_banco = entry_valor.get()
+                senha = entry_senha.get()
+                janela_adicionar.destroy()
+                if conta and senha:
+                    try:
+                        valor_banco = float(valor_banco)
+                    except ValueError:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado não corresponde um valor númerico.")
+                        return
+                    if valor_banco <=0:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado deve ser maior do que zero.")
+                        return
+                    self.saque(conta, valor_banco, senha, data_transação)
+
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Realizar Saque")
+            # Label e Entry para inserir o número da conta
+            label_conta = tk.Label(janela_adicionar, text="Insira o número da conta:")
+            label_conta.pack(pady=10)
+            entry_conta = tk.Entry(janela_adicionar, width=30)
+            entry_conta.pack()
+            # Label e Entry para inserir a senha
+            label_senha = tk.Label(janela_adicionar, text="Insira a senha:")
+            label_senha.pack(pady=10)
+            entry_senha = tk.Entry(janela_adicionar, width=30, show="*")
+            entry_senha.pack()
+            # Label e Entry para inerir o valor
+            label_valor = tk.Label(janela_adicionar, text="Insira o valor do Saque:")
+            label_valor.pack(pady=10)
+            entry_valor = tk.Entry(janela_adicionar, width=30)
+            entry_valor.pack()
+            # Botão para enviar dados
+            btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
+            btn_adicionar.pack()
+            
+            janela_adicionar.mainloop()
 
         def on_transferencia(): # Realizar transferencia
             data_transação = datetime.datetime.now()
-            numero_conta_pagadora = input("Digite o número da conta pagadora: ")
-            senha_conta_pagadora = input(f"digite a senha da conta {numero_conta_pagadora}: ")
-            numero_conta_recebedora = input("Digite o número da conta que irá receber: ")
-            if numero_conta_pagadora != numero_conta_recebedora:
-                try: valor_transferencia = float(input("Digite o valor da transferência: "))
-                except ValueError:
-                    print("O valor digitado é inválido")
-                    root.mainloop() # volta ao inicio do loop
-                if valor_transferencia <=0:
-                    print("O valor da transferencia deve ser maior que zero.")
-                    root.mainloop()
-                self.transferencia(numero_conta_pagadora, numero_conta_recebedora, valor_transferencia, senha_conta_pagadora, data_transação)
-            else:
-                print("As contas não podem ser iguais.")
+            def pegar_valor():
+                conta = entry_conta.get()
+                valor_banco = entry_valor.get()
+                senha = entry_senha.get()
+                conta_destino = entry_destino.get()
+                janela_adicionar.destroy()
+                if conta and senha and conta_destino:
+                    try:
+                        valor_banco = float(valor_banco)
+                    except ValueError:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado não corresponde um valor númerico.")
+                        return
+                    if valor_banco <= 0:
+                        messagebox.showerror("Erro, tente novamente", "O valor informado deve ser maior do que zero.")
+                        return
+                    self.transferencia(conta, conta_destino, valor_banco, senha, data_transação)
 
+            janela_adicionar = tk.Toplevel()
+            janela_adicionar.title("Realizar Transferência")
+            # Label e Entry para inserir o número da conta
+            label_conta = tk.Label(janela_adicionar, text="Insira o número da conta:")
+            label_conta.pack(pady=10)
+            entry_conta = tk.Entry(janela_adicionar, width=30)
+            entry_conta.pack()
+            # Label e Entry para inserir a senha e a conta destino
+            label_senha = tk.Label(janela_adicionar, text="Insira a senha:")
+            label_senha.pack(pady=10)
+            entry_senha = tk.Entry(janela_adicionar, width=30, show="*")
+            entry_senha.pack()
+            label_destino = tk.Label(janela_adicionar, text="Insira o número da conta de destino:")
+            label_destino.pack(pady=10)
+            entry_destino = tk.Entry(janela_adicionar, width=30)
+            entry_destino.pack()
+            # Label e Entry para inerir o valor
+            label_valor = tk.Label(janela_adicionar, text="Insira o valor da Transferência:")
+            label_valor.pack(pady=10)
+            entry_valor = tk.Entry(janela_adicionar, width=30)
+            entry_valor.pack()
+            # Botão para enviar dados
+            btn_adicionar = tk.Button(janela_adicionar, text="Enviar Dados", command=pegar_valor)
+            btn_adicionar.pack()
+            
+            janela_adicionar.mainloop()
         def on_close():
-            print("Encerrando o programa...")
+            messagebox.showwarning("Encerrando o sistema","Encerrando o sistema, obrigado pela preferência")
             self.conexao.close()
             root.destroy()
             root.quit()
